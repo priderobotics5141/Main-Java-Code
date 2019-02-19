@@ -53,6 +53,10 @@ public class Robot extends TimedRobot {
   VictorSP arm = new VictorSP(5);
   VictorSP rearFoot = new VictorSP(6); //speed: 40.5 to 41 rotations per 30 seconds
   Servo simon = new Servo(7);
+  DigitalInput limitSwitch0 = new DigitalInput(0);
+  DigitalInput limitSwitch1 = new DigitalInput(1);
+  DigitalInput limitSwitch2 = new DigitalInput(2);
+  DigitalInput limitSwitch3 = new DigitalInput(3);
   AHRS navx;
 
   Timer autoPilotTimer = new Timer();
@@ -201,25 +205,19 @@ public class Robot extends TimedRobot {
       autoPilotTimer.start();
       doubleAuto = true;
     }
-    if (gamePad0.getRawButtonPressed(2)) {
-      targetAngle = 90;
-      autoFace = true;
-      autoFaceTimeNeeded = Math.abs((targetAngle-navx.getYaw()))/100.; //determine amount of time needed to automatically turn
-      autoPilotTimer.reset();
-      autoPilotTimer.start();
-      doubleAuto = true;
-    }
 
     if ((gamePad0.getRawButtonPressed(1)) || doAutoPilotNow && v==1) {
       autoPilotStep = 1;}
     else{doAutoPilotNow=false;}
-    if (autoPilotStep == 1){/*
+
+    switch(autoPilotStep) {
+      case 1:/*
       if (b) {tempRatioX = ratioX+(x/27);b=false;} //tempRatioX should change the 0
       //Change the 0 it must adjust to
       driveTrain.tankDrive(tempRatioX,tempRatioX);
       if (true) {autoPilotStep = 2;};
     }
-    if (autoPilotStep == 2){*/
+      case 2:{*/
       if(v==1){driveTrain.tankDrive((sineLeft/*(ratioX*.5)+ratioA*.8*/)+.1,((sineRight*10/13/*(-(ratioX*.5))*12/13+ratioA*.8*/))+.1);}//.4
       if (a > 15){autoPilotStep = 0;doAutoPilotNow = false;b=true;}
     }
@@ -242,14 +240,9 @@ public class Robot extends TimedRobot {
      }
      SmartDashboard.putNumber("normalized",normalizeAngle(navx.getYaw()+360));
     //arm negative is forward
-    //rearFoot.set(gamePad0.getRawAxis(2)*(76./80));
-    if(gamePad0.getRawButton(7)){frontFoot.set(-gamePad0.getRawAxis(2)*.7);}
-    else frontFoot.set(gamePad0.getRawAxis(2)*.7);
+    rearFoot.set(gamePad0.getRawAxis(2)*(76./80));
+    frontFoot.set(gamePad0.getRawAxis(2));
 
-/*     if(gamePad0.getRawButton(7)){rearFoot.set(-gamePad0.getRawAxis(2)*.7);}
-    else rearFoot.set(gamePad0.getRawAxis(2)*.7);
-    */
-//trigger without button moves foot down, with button moves foot up
     if(gamePad0.getPOV()>180 && gamePad0.getPOV()<320 && gamePad0.getRawAxis(1) < .1 && gamePad0.getRawAxis(5) < .1){ //270 = D pad left
       
       navxStep += 1;
@@ -298,14 +291,35 @@ public class Robot extends TimedRobot {
       }
     }
 
-/*    if(gamePad0.getRawButtonPressed(4)){
-      autoLiftStep=1;
+    if(gamePad0.getRawButtonPressed(3)){
+      autoLiftStep+=1;
     }
-    */
-    if(autoLiftStep==1){
-      frontFoot.set(.5);
-      rearFoot.set(.5);
+
+    switch(autoLiftStep) {
+      case 1:
+        if (!limitSwitch0.get()) { //This switch may not be mounted in the right place for this job. Maybe replace with timer function.
+          frontFoot.set(0);
+        }
+        else {frontFoot.set(.5);}
+        if (!limitSwitch1.get()) {
+          rearFoot.set(0);
+        }
+        else {rearFoot.set(.5);}
+        if (frontFoot.get() == 0 && rearFoot.get() == 0) {
+          autoLiftStep = 2;
+        }
+      case 2:
+        if (!limitSwitch2.get()) {
+          frontFoot.set(-.5);
+        }
+        else {frontFoot.set(0);}
+      case 3:
+        ;
+      case 4:
+        ;
     }
+
+    
 
      
    }
