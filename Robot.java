@@ -1,3 +1,4 @@
+//Robot 2-11.java
 /*----------------------------------------------------------------------------*/
 /* Copyright (c) 2017-2018 FIRST. All Rights Reserved.                        */
 /* Open Source Software - may be modified and shared by FRC teams. The code   */
@@ -7,10 +8,6 @@
 
 package frc.robot;
 
-import com.kauailabs.navx.frc.AHRS;
-import com.kauailabs.navx.frc.AHRS.SerialDataType;
-import edu.wpi.first.wpilibj.DigitalInput;
-import edu.wpi.first.cameraserver.CameraServer;
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.SpeedControllerGroup;
 import edu.wpi.first.wpilibj.TimedRobot;
@@ -18,14 +15,20 @@ import edu.wpi.first.wpilibj.VictorSP;
 import edu.wpi.first.wpilibj.drive.DifferentialDrive;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
-import edu.wpi.first.wpilibj.SerialPort;
-import edu.wpi.first.wpilibj.Servo;
 import edu.wpi.first.wpilibj.GenericHID.RumbleType;
+
 import edu.wpi.first.wpilibj.Timer;
-import edu.wpi.first.wpilibj.Victor;
+import edu.wpi.first.wpilibj.Ultrasonic;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableEntry;
 import edu.wpi.first.networktables.NetworkTableInstance;
+
+import edu.wpi.first.wpilibj.I2C;
+import edu.wpi.first.wpilibj.util.Color;
+import com.revrobotics.ColorSensorV3;
+import com.revrobotics.ColorMatchResult;
+import com.revrobotics.ColorMatch;
+import edu.wpi.first.wpilibj.AnalogInput; //Ultrasonic Sensor
 
 
 /**
@@ -49,30 +52,21 @@ public class Robot extends TimedRobot {
   VictorSP right1 = new VictorSP(3);
   SpeedControllerGroup rightDrive = new SpeedControllerGroup(right0,right1);
   DifferentialDrive driveTrain = new DifferentialDrive(leftDrive, rightDrive);
-  VictorSP frontFoot = new VictorSP(4); //speed: 40 rotations per 30 seconds
   VictorSP arm = new VictorSP(5);
-  VictorSP rearFoot = new VictorSP(6); //speed: 40.5 to 41 rotations per 30 seconds
-  Servo simon = new Servo(7);
-  VictorSP vacuum = new VictorSP(9);
-  DigitalInput limitSwitch0 = new DigitalInput(0);
-  DigitalInput limitSwitch1 = new DigitalInput(1);
-  DigitalInput limitSwitch2 = new DigitalInput(2);
-  DigitalInput limitSwitch3 = new DigitalInput(3);
-  AHRS navx;
 
   Timer autoPilotTimer = new Timer();
 
   int autoPilotStep = 0;
-  int navxStep = 0;
-  double targetAngle;
-  int autoLiftStep = 0;
-  boolean autoFace;
-  double autoFaceTimeNeeded;
-  boolean doAutoPilotNow = false;
-  boolean b = true;
-  double tempRatioX;
-  boolean doubleAuto=false;
-  int Vvacuum = 0;
+
+  private final I2C.Port cPort = I2C.Port.kOnboard;
+  private final ColorSensorV3 cSensor = new ColorSensorV3(cPort);
+  private final ColorMatch m_colorMatcher = new ColorMatch();
+  private final Color BlueTarget = ColorMatch.makeColor(0.143, 0.427, 0.429);
+  private final Color GreenTarget = ColorMatch.makeColor(0.197, 0.561, 0.240);
+  private final Color RedTarget = ColorMatch.makeColor(0.561, 0.232, 0.114);
+  private final Color YellowTarget = ColorMatch.makeColor(0.361, 0.524, 0.113);
+
+  private final AnalogInput ultrasonic = new AnalogInput(0);
 
   /**
    * This function is run when the robot is first started up and should be
@@ -83,12 +77,14 @@ public class Robot extends TimedRobot {
     m_chooser.setDefaultOption("Default Auto", kDefaultAuto);
     m_chooser.addOption("My Auto", kCustomAuto);
     SmartDashboard.putData("Auto choices", m_chooser);
-    navx = new AHRS(SerialPort.Port.kMXP, SerialDataType.kProcessedData, (byte)50);
     rightDrive.setInverted(false);// Set true for Flash, set false for Simon/Tank
-    left0.setInverted(false);//false for Simon and Dave, true for Flash
-    left1.setInverted(true);// Set false for Dave, set true for Simon and Flash
-    CameraServer.getInstance().startAutomaticCapture();
-
+    left0.setInverted(false);//false for simon and Dave
+    left1.setInverted(true);// Set false for Dave, set true for Simon
+    
+    m_colorMatcher.addColorMatch(BlueTarget);
+    m_colorMatcher.addColorMatch(GreenTarget);
+    m_colorMatcher.addColorMatch(RedTarget);
+    m_colorMatcher.addColorMatch(YellowTarget);
   }
 
   /**
@@ -101,7 +97,37 @@ public class Robot extends TimedRobot {
    */
   @Override
   public void robotPeriodic() {
+    int proximity = cSensor.getProximity();
+    Color detectedColor = cSensor.getColor();
+    String colorString;
+    ColorMatchResult match = m_colorMatcher.matchClosestColor(detectedColor);
+    
+    if (match.color == BlueTarget) {
+      colorString = "Blue" ;
+    } else if (match.color == RedTarget) {
+      colorString = "Red";
+    } else if (match.color == GreenTarget) {
+      colorString = "Green";
+    } else if (match.color == YellowTarget) {
+      colorString = "Yellow";
+    } else {
+      colorString = "Unknown";
+    }
+    //Scanner keyboard = new Scanner(System.in);
+    //int myint = keyboard.nextInt();
+    /**
+     * The sensor returns a raw IR value of the infrared light detected.
+     */
+    double IR = cSensor.getIR();
+    SmartDashboard.putNumber("Red", detectedColor.red);
+    SmartDashboard.putNumber("Green", detectedColor.green);
+    SmartDashboard.putNumber("Blue", detectedColor.blue);
+    SmartDashboard.putNumber("IR", IR);
+    SmartDashboard.putNumber("Proximity", proximity);
+    SmartDashboard.putNumber("Confidence", match.confidence);
+    SmartDashboard.putString("Detected Color", colorString);
 
+    SmartDashboard.putNumber("UltraDistance", ultrasonic.getValue());
   }
 
   /**
@@ -117,7 +143,6 @@ public class Robot extends TimedRobot {
    */
   @Override
   public void autonomousInit() {
-    teleopInit();
     m_autoSelected = m_chooser.getSelected();
     // m_autoSelected = SmartDashboard.getString("Auto Selector", kDefaultAuto);
     System.out.println("Auto selected: " + m_autoSelected);
@@ -128,7 +153,6 @@ public class Robot extends TimedRobot {
    */
   @Override
   public void autonomousPeriodic() {
-    teleopPeriodic();
     switch (m_autoSelected) {
       case kCustomAuto:
         // Put custom auto code here
@@ -142,230 +166,95 @@ public class Robot extends TimedRobot {
   @Override
   public void teleopInit() {
     autoPilotTimer.start();
-    navx.reset();
-    navx.zeroYaw();
-    vacuum.set(0);
-    simon.set(.5);
-  }
-  public static double normalizeAngle(double angle){
-    return angle-360*Math.round(angle/360.0);
   }
   /**
    * This function is called periodically during operator control.
    */
   @Override
-  public void teleopPeriodic() {
-
-    
-    double yaw = navx.getYaw();
-    
+  public void teleopPeriodic() {    
    
     NetworkTable table = NetworkTableInstance.getDefault().getTable("limelight");
     NetworkTableEntry tx = table.getEntry("tx");
     NetworkTableEntry ty = table.getEntry("ty");
     NetworkTableEntry ta = table.getEntry("ta");
-    NetworkTableEntry tv = table.getEntry("tv");
 
     double x = tx.getDouble(0.0);
     double y = ty.getDouble(0.0);
     double a = ta.getDouble(0.0);
-    double v = tv.getDouble(0.0);
 
-    double ratioX = (x-6)/27;
-    double ratioY = y/40.5;
-    double ratioA = .8*(1-(a/20));//changed
+    double ratioX = x/27;
+    double ratioY = y/20.5;
+    double ratioA = 1-(a/20);
 
-    double min = .34;
-    double sineWithSignum = Math.signum(ratioX)*(1-min)*Math.sin(ratioX*Math.PI/2)+(1+min)/2;
-    double sineLeft = ((ratioA+min)-((ratioA+min)-min)/2)*Math.sin(ratioX*Math.PI/2)+((ratioA+min)+min)/2;
-    //(ratioA+min) = max
-    //min = min
-    double sineRight = (min-((ratioA+min)-min)/2)*Math.sin(ratioX*Math.PI/2)+((ratioA+min)+min)/2;
+    double min = .3; //MIN_SOMETHING_SPEED
+    double sineWithSignum = Math.signum(ratioX)*(1-min)*Math.sin(ratioX*Math.PI/2)+(1+min)/2; //sine curve of adjustment
+    //double ogDrive = (ratioX*.7+min)+ratioA*.3;
+    //double newDrive = (ratioX*.7)+ min + (ratioA*.3);
+
     double newNewDrive = sineWithSignum + min + (ratioA*.3);
 
-
+    driveTrain.tankDrive(newNewDrive + min, 12/13 * newNewDrive + min); //minimum + adjustment/slow down
 
     //double correctionRatio = -ratioX + 1;
    // double correctionX = (Math.signum(-ratioX)*ratioX*ratioX)+(2*ratioX)+(Math.signum(ratioX)*.2);
     //double correctionX = Math.sin(1.2*ratioX + .2);
-    double correctionX = (Math.signum(ratioX) == 1) ? Math.sin(1.2*ratioX + .2): Math.sin(1.2*ratioX - .2);
+    //double correctionX = (Math.signum(ratioX) == 1) ? Math.sin(1.2*ratioX + .2): Math.sin(1.2*ratioX - .2);
 
 
     SmartDashboard.putNumber("LimelightX", x);
     SmartDashboard.putNumber("LimelightY", y);
     SmartDashboard.putNumber("LimelightA", a);
-    SmartDashboard.putNumber("correctionX", correctionX);  
+    //SmartDashboard.putNumber("correctionX", correctionX);  
     SmartDashboard.putNumber("ratioX",ratioX);
-    SmartDashboard.putNumber("D-Pad",gamePad0.getPOV());
-    SmartDashboard.putNumber("Yaw",navx.getYaw());
-    SmartDashboard.putNumber("NavxStep",navxStep);
-    SmartDashboard.putBoolean("Auto",doAutoPilotNow);
-    SmartDashboard.putNumber("Arm", arm.get());
-    SmartDashboard.putNumber("AutoLiftStep", autoLiftStep);
 
-    
-    //if (gamePad0.getRawButtonPressed(2)) { //b button}
-    //
-    if (gamePad0.getRawButtonPressed(3)) { //x button
-      simon.set(simon.get() == .6 ? .28:.6);
+    if (gamePad0.getRawButtonPressed(1)) {
+      autoPilotStep = 1;
+      autoPilotTimer.reset();
     }
-    if (simon.get()==.6){ vacuum.set(.5);}
-    if (simon.get()==.28){ vacuum.set(0);}
-
-    if ((gamePad0.getRawButtonPressed(1)) || doAutoPilotNow && v==1) { //a button
-      autoPilotStep = 1;}
-    else{doAutoPilotNow=false;}
-
-    switch(autoPilotStep) {
-      case 1:/*
-      if (b) {tempRatioX = ratioX+(x/27);b=false;} //tempRatioX should change the 0
-      //Change the 0 it must adjust to
-      driveTrain.tankDrive(tempRatioX,tempRatioX);
-      if (true) {autoPilotStep = 2;};
+    if (autoPilotStep == 1){
+      if(autoPilotTimer.get()<.5){
+        //driveTrain.tankDrive(-correctionX,correctionX*12/13);
+      }
+      else autoPilotStep = 2;
     }
-      case 2:{*/
-      if(v==1){driveTrain.tankDrive((sineLeft/*(ratioX*.5)+ratioA*.8*/)+.1,((sineRight*10/13/*(-(ratioX*.5))*12/13+ratioA*.8*/))+.1);}//.4
-      if (a > 15){autoPilotStep = 0;doAutoPilotNow = false;b=true;}
+    if (autoPilotStep == 2){
+      autoPilotTimer.reset();
+      if(autoPilotTimer.get()<3){
+        //driveTrain.tankDrive(ratioY*.5, ratioY*.5);
+      }
     }
-    if(gamePad0.getRawButtonPressed(8)){ //start button is kill switch for autoPilot, autoTurnLeft, and autoTurnRight
+    if(gamePad0.getRawButtonPressed(8)){ //start button is kill switch for autoPilot
       autoPilotStep=0;
-      doAutoPilotNow=false;
-      doubleAuto=false;
-      autoFace=false;
     }
-
-      if(gamePad0.getRawButton(5)){frontFoot.set(1);} //left bumper
-      else{frontFoot.set(0);}
+        
+      //driveTrain.tankDrive(.65*ratioY,.65*ratioY*12/13);
     
-    if(autoPilotStep==0 && autoFace==false){
+    if(autoPilotStep==0){
       SmartDashboard.putNumber("leftStick",gamePad0.getRawAxis(1));
       SmartDashboard.putNumber("rightStick",gamePad0.getRawAxis(5));
       double leftStick = (-gamePad0.getRawAxis(1)*.6)*(gamePad0.getRawAxis(3)+1);
       double rightStick = (-gamePad0.getRawAxis(5)*.6)*(gamePad0.getRawAxis(3)+1);
-      driveTrain.tankDrive(leftStick,rightStick);//*12/13 is motor ratio for simon none for flash
+      driveTrain.tankDrive(leftStick,rightStick*12/13);//12/13 is motor ratio for simon
      }
-     SmartDashboard.putNumber("normalized",normalizeAngle(navx.getYaw()+360));
-    //arm negative is forward
-    if(gamePad0.getRawButton(2)){ //back button
-     arm.set(gamePad0.getRawAxis(2)*0.5); //left trigger
-    }
-    else{
-     arm.set(-gamePad0.getRawAxis(2)*0.5);
-    }
-    //rearFoot.set(gamePad0.getRawAxis(2)*(76./80));
-    //frontFoot.set(gamePad0.getRawAxis(2));
-
-
-    if(gamePad0.getPOV()>180 && gamePad0.getPOV()<320 && gamePad0.getRawAxis(1) < .1 && gamePad0.getRawAxis(5) < .1){ //270 = D pad left
-      
-      navxStep += 1;
-      if (navxStep == 1) {
-//        navx.zeroYaw();
-        targetAngle = -90;
-        autoFace = true;
-        autoFaceTimeNeeded = Math.abs((targetAngle-navx.getYaw()))/100.; //determine amount of time needed to automatically turn
-        autoPilotTimer.reset();
-        autoPilotTimer.start();
-      }
-    }
-    else{navxStep = 0;};
-
-    SmartDashboard.putNumber("targetAngle",targetAngle);
-    SmartDashboard.putBoolean("autoFace",autoFace);
-    SmartDashboard.putNumber("autoFaceTimeNeeded",autoFaceTimeNeeded);
-
-    if(gamePad0.getPOV()>30 && gamePad0.getPOV()<150 && gamePad0.getRawAxis(1) < .1 && gamePad0.getRawAxis(5) < .1){ //90 = D pad right
-      
-      navxStep += 1;
-      if (navxStep == 1) {
-//        navx.zeroYaw();
-        targetAngle = 90;
-        autoFace = true;
-        autoFaceTimeNeeded = Math.abs((targetAngle-navx.getYaw()))/100.; //determine amount of time needed to automatically turn
-        autoPilotTimer.reset();
-        autoPilotTimer.start();
-      }
-    }
-    else{navxStep = 0;};
-
-    SmartDashboard.putBoolean("autoFace",autoFace);
-
-    if (autoFace){
-      if(autoPilotTimer.get()<autoFaceTimeNeeded){
-      double diff = (targetAngle-navx.getYaw())/70;
-      driveTrain.tankDrive(diff*.5+Math.signum(diff)*min,-diff*.5-Math.signum(diff)*min);
-      SmartDashboard.putNumber("diff",diff);
-      }
-      else {
-        autoFace=false;
-        if(doubleAuto){
-          doAutoPilotNow = true;
-        }
-      }
-    }
-
-    //if(gamePad0.getRawButtonPressed(4)){ // y button
-    //  autoLiftStep+=1;
-    //}
-
-    if(autoPilotStep != 0 || autoFace){
-      gamePad0.setRumble(RumbleType.kRightRumble, 0.5);
-      gamePad0.setRumble(RumbleType.kLeftRumble, 0.5);
-    }
-    else{
-      gamePad0.setRumble(RumbleType.kRightRumble, 0);
-      gamePad0.setRumble(RumbleType.kLeftRumble, 0); 
-    } //rumble is bad half the time b/c driver station
-
-    /*
-    switch(autoLiftStep) { //driver supervises process and presses the y button to move on to next step
-      case 1:
-        if (!limitSwitch0.get()) { //This switch may not be mounted in the right place for this job. Maybe replace with timer function.
-          frontFoot.set(0);
-        }
-        else {frontFoot.set(.5);}
-        if (!limitSwitch1.get()) {
-          rearFoot.set(0);
-        }
-        else {rearFoot.set(.5);}
-        if (frontFoot.get() == 0 && rearFoot.get() == 0) {
-          autoLiftStep = 2;
-        }
-        break;
-      case 2:
-        if (!limitSwitch2.get()) {
-          frontFoot.set(-.5);
-        }
-        else {frontFoot.set(0);}
-        break;
-      case 3:
-        break;
-      case 4:
-        break;
-    }
-
-    
-
-*/
-if(gamePad0.getRawButton(2)){ //back button
-  frontFoot.set(gamePad0.getRawButton(5)? -0.4:0); //left bumper
- }
- else{
-  frontFoot.set(gamePad0.getRawButton(5)? 0.4:0); //lb
- }
+     arm.set(-gamePad0.getRawAxis(2));
+     
+     if(gamePad0.getRawButtonPressed(3)){
+       //simon.set(.6);
+       //vacuum.set(.5);
+       gamePad0.setRumble(RumbleType.kRightRumble, 0.7);
+       gamePad0.setRumble(RumbleType.kLeftRumble, 0.7);
+     }
+     else{
+       //simon.set(.28);
+       //vacuum.set(0);
+       gamePad0.setRumble(RumbleType.kRightRumble, 0);
+       gamePad0.setRumble(RumbleType.kLeftRumble, 0);
+     }
  
- if(gamePad0.getRawButton(2)){ //back button
-  rearFoot.set(gamePad0.getRawButton(6)? -0.4:0); //right bumper
- }
- else{
-  rearFoot.set(gamePad0.getRawButton(6)? 0.4:0); //rb
- }
-
    }
   /**
    * This function is called periodically during test mode.
    */
-  
   @Override
   public void testPeriodic() {
   }
